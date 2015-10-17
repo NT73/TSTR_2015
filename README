@@ -1,0 +1,15 @@
+		Projet TSTR SICOM 2015
+
+Presentation
+------------
+Ce projet realise dans le cadre de modules de "Traitement du Signal
+en Temps Reel" vise a implementer en C++ des effets audio en 
+utilisant l'API RtAudio.
+
+--> Effet reverb à convolution
+
+Insatallation
+-------------
+
+-------------------------------------------------------------------------
+QIAO Yu - TATOUD Nicolas
