@@ -1,22 +1,7 @@
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <math.h>
-
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#define MAX(a,b) (((a)>(b))?(a):(b))
+#include "somefunc.h"
 
 double *_sintbl = 0;
 int maxfftsize = 0;
-int fft(double *x, double *y, const int m);
-  int ifft(double *x, double *y, const int m);
-int fftr(double *x, double *y, const int m);
-int ifftr(double *x, double *y, const int l);
-  static int checkm(const int m);
-int get_nextpow2(int n);
-char *getmem(int leng, unsigned size);
-double *dgetmem(int leng);
-double get_process_time();
-
 
 ///////////////////////////////
 // FFT functions
@@ -59,7 +44,7 @@ int fftr(double *x, double *y, const int m)
 
    if ((_sintbl == 0) || (maxfftsize < m)) {
       tblsize = m - m / 4 + 1;
-      arg = PI / m * 2;
+      arg = M_PI / m * 2;
       if (_sintbl != 0)
          free(_sintbl);
       _sintbl = sinp = dgetmem(tblsize);
@@ -163,7 +148,7 @@ int fft(double *x, double *y, const int m)
 
    if ((_sintbl == 0) || (maxfftsize < m)) {
       tblsize = m - m / 4 + 1;
-      arg = PI / m * 2;
+      arg = M_PI / m * 2;
       if (_sintbl != 0)
          free(_sintbl);
       _sintbl = sinp = dgetmem(tblsize);

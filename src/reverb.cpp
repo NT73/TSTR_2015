@@ -1,14 +1,15 @@
 /******************************************/
 /*
-  duplex.cpp
-  by Gary P. Scavone, 2006-2007.
+  reverb.cpp
+  by Qiao Yu & Tatoud Nicolas.
 
-  This program opens a duplex stream and passes
-  input directly through to the output.
+  Implementation temp. & freq. reverb effect
+  by convolution
 */
 /******************************************/
 
 #include "RtAudio.h"
+#include "somefunc.h"
 #include <iostream>
 #include <cstdio>
 #include <cstdlib>
@@ -40,18 +41,19 @@ typedef double MY_TYPE;
 
 typedef struct {
     unsigned int bufferBytes;
-    MY_TYPE* bufferImpres = NULL;
+    MY_TYPE* bufferImpres;
     unsigned int impresFrames;
     unsigned int bufferFrames;
     unsigned int convSize;
-    MY_TYPE *bufferConv = NULL;
+    MY_TYPE *bufferConv;
+    //MY_TYPE *bufferLastConv;
   } userData;
 
 
 void usage( void ) {
   // Error function in case of incorrect command-line
   // argument specifications
-  std::cout << "\nuseage: duplex N fs <iDevice> <oDevice> <iChannelOffset> <oChannelOffset>\n";
+  std::cout << "\nuseage: reverb N fs <iDevice> <oDevice> <iChannelOffset> <oChannelOffset>\n";
   std::cout << "    where N = number of channels,\n";
   std::cout << "    fs = the sample rate,\n";
   std::cout << "    iDevice = optional input device to use (default = 0),\n";
@@ -61,10 +63,12 @@ void usage( void ) {
   exit( 0 );
 }
 
+
 /***
 * Routine de CallBack Audio
 * Implementation de l'effet reverb à convolution en temps reel
 ***/
+
 int inout( void *outputBuffer, void *inputBuffer, unsigned int /*nBufferFrames*/,
            double /*streamTime*/, RtAudioStreamStatus status, void *data )
 {
@@ -72,7 +76,7 @@ int inout( void *outputBuffer, void *inputBuffer, unsigned int /*nBufferFrames*/
   // a simple buffer copy operation here.
   if ( status ) std::cout << "Stream over/underflow detected." << std::endl;
   
-  unsigned int effet_audio = REVERB_TEMP ;
+  unsigned int effet_audio = DUPLEX ;
   userData* pData = (userData *) data;
   unsigned int *bytes = (unsigned int *) &(pData->bufferBytes);
   unsigned int *impresFrames = (unsigned int *) &(pData->impresFrames);
@@ -80,6 +84,11 @@ int inout( void *outputBuffer, void *inputBuffer, unsigned int /*nBufferFrames*/
   unsigned int *convSize = (unsigned int *) &(pData->convSize);
   MY_TYPE* impres = (MY_TYPE *) (pData->bufferImpres);
   MY_TYPE* conv = (MY_TYPE *) (pData->bufferConv);
+  //MY_TYPE* lastConv = (MY_TYPE *) (pData->bufferLastConv);
+  
+  // Mesure du temps initial
+  double tStart, tEnd, deltaT;
+  tStart = get_process_time();
   
   switch(effet_audio) {
   
@@ -93,7 +102,7 @@ int inout( void *outputBuffer, void *inputBuffer, unsigned int /*nBufferFrames*/
   case REVERB_TEMP :
   
     // Convolution temporelle
-    double *tmpBuffer = (double *)inputBuffer;
+    MY_TYPE *tmpInputBuffer = (MY_TYPE *)inputBuffer;
     
     for(unsigned int i=0; i<*convSize;i++) {
       unsigned int kmin = (i>=*impresFrames)?i-*impresFrames+1:0;
@@ -102,12 +111,16 @@ int inout( void *outputBuffer, void *inputBuffer, unsigned int /*nBufferFrames*/
       
       for(unsigned int j=kmin;j<=kmax;j++)
       {
-        tmp=tmp+tmpBuffer[j]*impres[i-j];
+        tmp=tmp+tmpInputBuffer[j]*impres[i-j];
       }
-      conv[i]=(i<(*impresFrames))?tmp+conv[*bufferFrames+i]:tmp;
+      //conv[i] = tmp;
+      //if(i<*impresFrames-1) {conv[i]+=lastConv[*bufferFrames+i];}
+      conv[i]=(i<(*impresFrames-1))?tmp+conv[*bufferFrames+i]:tmp;
     }
     
+    //memcpy( (void *)lastConv, (void *)conv, (*convSize)*sizeof(MY_TYPE) );
     memcpy( outputBuffer, (void *)conv, *bytes );
+    
   break;
   
   /*
@@ -117,8 +130,13 @@ int inout( void *outputBuffer, void *inputBuffer, unsigned int /*nBufferFrames*/
   */
   }
   
+  tEnd = get_process_time();
+  deltaT= tEnd - tStart ;
+  std::cout << "t = " << deltaT << " s" << std::endl ;
   return 0 ;
 }
+
+
 
 
 int main( int argc, char *argv[] )
@@ -135,14 +153,16 @@ int main( int argc, char *argv[] )
   FILE *ptr_impres = NULL ;
   unsigned int file_size ;
   
-  ptr_impres = fopen ( "impres" , "rb" );
+  ptr_impres = fopen ( "src/impres" , "rb" );
   if (ptr_impres==NULL) {fputs ("File error\n",stderr); exit (1);}
   
   // Determination de la taille du fichier
   fseek (ptr_impres , 0 , SEEK_END);
   file_size = ftell (ptr_impres);
+  // Diminution du nombre d'echantillon de la reponse impulsionnelle
+  file_size -= 70000*sizeof(MY_TYPE);
   rewind (ptr_impres);
-  // std::cout << file_size << std::endl ;
+  //std::cout << file_size << std::endl ;
   
   // Allocation de la mémoire de la reponse impulsionnelle
   optionData.bufferImpres = (MY_TYPE*) malloc (sizeof(char)*file_size);
@@ -150,11 +170,19 @@ int main( int argc, char *argv[] )
   
   // Lecture du fichier
   optionData.impresFrames = file_size/sizeof(MY_TYPE);
+  std::cout << "Taille reponse impulsonnelle : " << optionData.impresFrames << std::endl ;
   if (fread (optionData.bufferImpres,sizeof(MY_TYPE),optionData.impresFrames,ptr_impres) != optionData.impresFrames) { 
     fputs ("Reading error",stderr); 
     exit (3);
   }
   fclose(ptr_impres);
+  
+  /*
+  // Verification de la reponse impulsionnelle
+  for(unsigned int m=100;m<140;m++) {
+    std::cout << m << " : " << optionData.bufferImpres[m] << std::endl;
+  }
+  */
   
   /***
   * Implementation des classes et methodes fournies par l'API RtAudio
@@ -202,12 +230,15 @@ int main( int argc, char *argv[] )
   RtAudio::StreamOptions options;
   //options.flags |= RTAUDIO_NONINTERLEAVED;
   
-  // Defintion des parametres fournis à la routine de CallBack
+  // Definition des membres de la structure fournie à la routine de CallBack Audio
   optionData.bufferFrames = bufferFrames;
   optionData.bufferBytes = bufferFrames * channels * sizeof( MY_TYPE );
   optionData.convSize = bufferFrames + optionData.impresFrames - 1;
   optionData.bufferConv = (MY_TYPE*) calloc (optionData.convSize,sizeof(MY_TYPE));
   if (optionData.bufferConv == NULL) {fputs ("Memory error",stderr); exit (2);}
+  
+  //optionData.bufferLastConv = (MY_TYPE*) calloc (optionData.convSize,sizeof(MY_TYPE));
+  //if (optionData.bufferLastConv == NULL) {fputs ("Memory error",stderr); exit (2);}
   
   try {
     adac.openStream( &oParams, &iParams, FORMAT, fs, &bufferFrames, &inout, (void *)&optionData, &options );
@@ -240,6 +271,7 @@ int main( int argc, char *argv[] )
   
   free(optionData.bufferImpres);
   free(optionData.bufferConv);
+  //free(optionData.bufferLastConv);
 
   return 0;
 }
