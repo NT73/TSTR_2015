@@ -48,6 +48,10 @@ typedef struct {
     unsigned int convSize;
     MY_TYPE *bufferConv;
     //MY_TYPE *bufferLastConv;
+    unsigned int fftSize;
+    MY_TYPE* bufImpres_fft;
+    MY_TYPE* bufInput_fft;
+    MY_TYPE* res_fft;
   } userData;
 
 
@@ -65,6 +69,19 @@ void usage( void ) {
   exit( 0 );
 }
 
+/***
+* Convolution frequentielle
+***/
+
+void multfft(MY_TYPE* res,MY_TYPE* sig1, MY_TYPE* sig2, unsigned int fftSize)
+{
+    unsigned int ind;
+    for(ind=0;ind<fftSize;ind++)
+    {
+        res[ind]=sig1[ind]*sig2[ind]-sig1[ind+fftSize]*sig2[ind+fftSize];
+        res[ind+fftSize]=sig1[ind]*sig2[ind+fftSize]+sig1[ind+fftSize]*sig2[ind];
+    }
+}
 
 /***
 * Routine de CallBack Audio
@@ -87,6 +104,10 @@ int inout( void *outputBuffer, void *inputBuffer, unsigned int /*nBufferFrames*/
   MY_TYPE* impres = (MY_TYPE *) (pData->bufferImpres);
   MY_TYPE* conv = (MY_TYPE *) (pData->bufferConv);
   //MY_TYPE* lastConv = (MY_TYPE *) (pData->bufferLastConv);
+  unsigned int *fftSize = (unsigned int *) &(pData->fftSize);
+  MY_TYPE* impfft = (MY_TYPE *) (pData->bufImpres_fft);
+  MY_TYPE* infft = (MY_TYPE *) (pData->bufInput_fft);
+  MY_TYPE* resfft = (MY_TYPE *) (pData->res_fft);
   
   // Mesure du temps initial
   double tStart, tEnd, deltaT;
@@ -127,7 +148,30 @@ int inout( void *outputBuffer, void *inputBuffer, unsigned int /*nBufferFrames*/
   
   case REVERB_FREQ :
   {
-    memcpy( outputBuffer, inputBuffer, *bytes );
+    // Convolution frequentielle
+    MY_TYPE *tmpInputBuffer = (MY_TYPE *)inputBuffer;
+    
+    for(unsigned int k=0;k<2*(*fftSize);k++) {
+      infft[k]=0.0;
+    }
+    
+    memcpy(infft, tmpInputBuffer, *bufferFrames*sizeof(MY_TYPE));
+    
+    // FFT du signal acquis
+    MY_TYPE* y = infft + *fftSize ;
+    fftr(infft, y, *fftSize);
+    
+    multfft(resfft, infft, impfft, *fftSize);
+    
+    // FFT inverse de la multiplication dans la domaine frequentiel
+    MY_TYPE* yy = resfft + *fftSize ;
+    ifftr(resfft, yy, *fftSize);
+    
+    for(unsigned int i=0; i<*convSize;i++) {
+      conv[i]=(i<(*impresFrames-1))?resfft[i]+conv[*bufferFrames+i]:resfft[i];
+    }
+    
+    memcpy( outputBuffer, (void *)conv, *bytes );
   }
   break ;
   
@@ -246,9 +290,28 @@ int main( int argc, char *argv[] )
   optionData.convSize = bufferFrames + optionData.impresFrames - 1;
   optionData.bufferConv = (MY_TYPE*) calloc (optionData.convSize,sizeof(MY_TYPE));
   if (optionData.bufferConv == NULL) {fputs ("Memory error",stderr); exit (2);}
-  
-  //optionData.bufferLastConv = (MY_TYPE*) calloc (optionData.convSize,sizeof(MY_TYPE));
+    //optionData.bufferLastConv = (MY_TYPE*) calloc (optionData.convSize,sizeof(MY_TYPE));
   //if (optionData.bufferLastConv == NULL) {fputs ("Memory error",stderr); exit (2);}
+  
+  /***
+  * Passage dans le domaine frequentielle de la reponse impulsionnelle
+  ***/
+  
+  if(optionData.effet_audio == 2) {
+    optionData.fftSize = get_nextpow2(optionData.convSize);      
+    optionData.bufImpres_fft = (MY_TYPE*) calloc (2*optionData.fftSize,sizeof(MY_TYPE));
+    if (optionData.bufImpres_fft == NULL) {fputs ("Memory error",stderr); exit (2);}
+    optionData.bufInput_fft = (MY_TYPE*) calloc (2*optionData.fftSize,sizeof(MY_TYPE));
+    if (optionData.bufInput_fft == NULL) {fputs ("Memory error",stderr); exit (2);}
+    optionData.res_fft = (MY_TYPE*) calloc (2*optionData.fftSize,sizeof(MY_TYPE));
+    if (optionData.res_fft == NULL) {fputs ("Memory error",stderr); exit (2);}
+      
+    memcpy(optionData.bufImpres_fft, optionData.bufferImpres, optionData.impresFrames*sizeof(MY_TYPE));
+      
+    MY_TYPE* y = optionData.bufImpres_fft + optionData.fftSize ;
+    fftr(optionData.bufImpres_fft, y, optionData.fftSize);
+  }
+
   
   try {
     adac.openStream( &oParams, &iParams, FORMAT, fs, &bufferFrames, &inout, (void *)&optionData, &options );
