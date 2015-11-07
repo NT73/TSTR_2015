@@ -11,5 +11,28 @@ utilisant l'API RtAudio.
 Insatallation
 -------------
 
+1/ Se placer dans le repertoire rtaudio-4.1.1 et lancer les commandes 
+suivantes dans le terminal
+
+>> ./configure
+>> make all
+
+2/ Se placer à la racine du projet et lancer
+
+>> make all
+
+Utilisation
+-----------
+Lancer l'executable reverb via la commande : 
+
+>> ./reverb N fs audio_effect
+
+avec 	N : le nombre de canaux audio
+	fs : la frequence d'echantillonnage du signal
+	audio_effect : un numero correspondant à l'effet audio choisi
+			-- 0 = aucune effet audio 
+			-- 1 = reverb à convolution dans le domaine temporel
+			-- 2 = reverb à convolution dans le domaine frequentiel
+
 -------------------------------------------------------------------------
 QIAO Yu - TATOUD Nicolas
