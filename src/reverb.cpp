@@ -40,6 +40,7 @@ typedef double MY_TYPE;
 #define FORMAT RTAUDIO_FLOAT64
 
 typedef struct {
+    unsigned int effet_audio;
     unsigned int bufferBytes;
     MY_TYPE* bufferImpres;
     unsigned int impresFrames;
@@ -53,9 +54,10 @@ typedef struct {
 void usage( void ) {
   // Error function in case of incorrect command-line
   // argument specifications
-  std::cout << "\nuseage: reverb N fs <iDevice> <oDevice> <iChannelOffset> <oChannelOffset>\n";
+  std::cout << "\nuseage: reverb N fs <Audio_effect> <iDevice> <oDevice> <iChannelOffset> <oChannelOffset>\n";
   std::cout << "    where N = number of channels,\n";
   std::cout << "    fs = the sample rate,\n";
+  std::cout << "    Audio_effect = 0 : no effect // 1 : temp convolution // 2 : freq convolution (defaut = 0),\n";
   std::cout << "    iDevice = optional input device to use (default = 0),\n";
   std::cout << "    oDevice = optional output device to use (default = 0),\n";
   std::cout << "    iChannelOffset = an optional input channel offset (default = 0),\n";
@@ -76,8 +78,8 @@ int inout( void *outputBuffer, void *inputBuffer, unsigned int /*nBufferFrames*/
   // a simple buffer copy operation here.
   if ( status ) std::cout << "Stream over/underflow detected." << std::endl;
   
-  unsigned int effet_audio = DUPLEX ;
   userData* pData = (userData *) data;
+  unsigned int *effet_audio = (unsigned int *) &(pData->effet_audio);
   unsigned int *bytes = (unsigned int *) &(pData->bufferBytes);
   unsigned int *impresFrames = (unsigned int *) &(pData->impresFrames);
   unsigned int *bufferFrames = (unsigned int *) &(pData->bufferFrames);
@@ -90,17 +92,17 @@ int inout( void *outputBuffer, void *inputBuffer, unsigned int /*nBufferFrames*/
   double tStart, tEnd, deltaT;
   tStart = get_process_time();
   
-  switch(effet_audio) {
+  switch(*effet_audio) {
   
   case DUPLEX :
-  
+  {
     // Aucun traitement effectue
     memcpy( outputBuffer, inputBuffer, *bytes );
-    
+  } 
   break;
   
   case REVERB_TEMP :
-  
+  {
     // Convolution temporelle
     MY_TYPE *tmpInputBuffer = (MY_TYPE *)inputBuffer;
     
@@ -120,14 +122,15 @@ int inout( void *outputBuffer, void *inputBuffer, unsigned int /*nBufferFrames*/
     
     //memcpy( (void *)lastConv, (void *)conv, (*convSize)*sizeof(MY_TYPE) );
     memcpy( outputBuffer, (void *)conv, *bytes );
-    
+  }  
   break;
   
-  /*
   case REVERB_FREQ :
+  {
     memcpy( outputBuffer, inputBuffer, *bytes );
+  }
   break ;
-  */
+  
   }
   
   tEnd = get_process_time();
@@ -137,12 +140,16 @@ int inout( void *outputBuffer, void *inputBuffer, unsigned int /*nBufferFrames*/
 }
 
 
-
+/***
+********************************************************************************
+***/
 
 int main( int argc, char *argv[] )
 {
   unsigned int channels, fs, oDevice = 0, iDevice = 0, iOffset = 0, oOffset = 0;
   userData optionData;
+  // Aucun effet audio par defaut
+  optionData.effet_audio = 0;
   
   /***
   * Ouverture et lecture du fichier binaire (sans entete) contenant
@@ -184,13 +191,14 @@ int main( int argc, char *argv[] )
   }
   */
   
+  
   /***
   * Implementation des classes et methodes fournies par l'API RtAudio
   * pour le Traitement de Signal en Temps Reel
   ***/
   
   // Minimal command-line checking
-  if (argc < 3 || argc > 7 ) usage();
+  if (argc < 3 || argc > 8 ) usage();
 
   RtAudio adac;
   if ( adac.getDeviceCount() < 1 ) {
@@ -201,13 +209,15 @@ int main( int argc, char *argv[] )
   channels = (unsigned int) atoi(argv[1]);
   fs = (unsigned int) atoi(argv[2]);
   if ( argc > 3 )
-    iDevice = (unsigned int) atoi(argv[3]);
+    optionData.effet_audio = (unsigned int) atoi(argv[3]);
   if ( argc > 4 )
-    oDevice = (unsigned int) atoi(argv[4]);
+    iDevice = (unsigned int) atoi(argv[4]);
   if ( argc > 5 )
-    iOffset = (unsigned int) atoi(argv[5]);
+    oDevice = (unsigned int) atoi(argv[4]);
   if ( argc > 6 )
-    oOffset = (unsigned int) atoi(argv[6]);
+    iOffset = (unsigned int) atoi(argv[6]);
+  if ( argc > 7 )
+    oOffset = (unsigned int) atoi(argv[7]);
 
   // Let RtAudio print messages to stderr.
   adac.showWarnings( true );
